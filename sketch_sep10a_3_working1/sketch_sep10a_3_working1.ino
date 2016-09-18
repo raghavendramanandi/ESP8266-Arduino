@@ -2,16 +2,17 @@
 #include <ArduinoJson.h>
 #include <EEPROM.h>
 
-const char* ssid     = "dlink";  
-const char* password = "oahf-fx9e-vimo";
+const char* ssid         = "dlink";  
+const char* password     = "oahf-fx9e-vimo";
+const char* host         = "www.raghavendramanandi.site88.net";  
+String path              = "/request.php?id=0001";
 
-const char* host     = "www.raghavendramanandi.site88.net"; // Your domain  
-String path          = "/request.php";
-const int pin        = 2;
-char ssid_file[32] = "";
-char password_file[32] = "";
+const int pin            = 2;
+char ssid_file[32]       = "";
+char password_file[32]   = "";
 
-void setup() {  
+void setup() {
+  int loadCred = 0;
   pinMode(pin, OUTPUT); 
   pinMode(pin, HIGH);
   Serial.begin(115200);
@@ -19,44 +20,57 @@ void setup() {
   Serial.print("Connecting to ");
   Serial.println(ssid);
   WiFi.begin(ssid, password);
-  int loadCred = 0;
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.println(".---- Inside While in setup -------");
-    Serial.println(WiFi.status());
     if(WiFi.status() == WL_NO_SSID_AVAIL && loadCred == 0){
-      Serial.println("########in if block#######");
       if(loadCredentials() == 1){
         ssid     = ssid_file;
         password = password_file;
-        //ssid     = "dlink";  
-        //password = "oahf-fx9e-vimo";
-
+        Serial.println("Using secondary credentials to connect");
         WiFi.begin(ssid, password);
         loadCred =1;
       }
     }else if(WiFi.status() == WL_NO_SSID_AVAIL && loadCred != 0){
-      errorLights();
+      errorLights(1);
     }
   }
 
-  Serial.println("WiFi connected to: ");  
+  Serial.print("WiFi connected to: ");  
   Serial.print(ssid);
-  Serial.print(password);
+  Serial.println(password);
 }
 
-void errorLights(){
-  Serial.println("errorLights");
-  delay(10000);
+void errorLights(int errorCode){
+  Serial.print("Error occured: ");
+  Serial.println(errorCode);
+  int value = -1;
+  int count =10;
+  while(count > 0){
+    count--;
+    if(value > 0){
+      digitalWrite(pin, LOW);
+      delay(1000);
+    }else{
+      digitalWrite(pin, HIGH);
+      delay(1000);
+    }
+    value= value*-1;
+  }
 }
 
 void successLight(){
   Serial.println("successLight");
-  delay(10000);
+  int count =10;
+  while(count > 0){
+    count --;
+    digitalWrite(pin, HIGH);
+    delay(1000);
+  }
 }
 
 int loadCredentials() {
+  int retVal = 1;
   EEPROM.begin(512);
   EEPROM.get(0, ssid_file);
   EEPROM.get(0+sizeof(ssid_file), password_file);
@@ -66,15 +80,12 @@ int loadCredentials() {
   if (String(ok) != String("OK")) {
     ssid_file[0] = 0;
     password_file[0] = 0;
+    retVal = 0;
   }
-  Serial.println("Recovered credentials:");
-  Serial.println(ssid_file);
+  Serial.print("Recovered credentials:");
+  Serial.print(ssid_file);
   Serial.println(password_file);
-
-  if(strlen(password)>0){
-    return 1;
-  }
-  return 0;
+  return retVal;
 }
 
 /** Store WLAN credentials to EEPROM */
@@ -86,6 +97,7 @@ void saveCredentials() {
   EEPROM.put(0+sizeof(ssid_file)+sizeof(password_file), ok);
   EEPROM.commit();
   EEPROM.end();
+  Serial.println("New Credentials saved");
 }
 
 void loop() {  
@@ -117,23 +129,17 @@ void loop() {
   String section="header";
   loop =1;
   while(loop == 1){
-    Serial.println("Inside while");
     if(client.available()){
-      Serial.println("Inside if");
       String line = client.readStringUntil('\r');
-      //Serial.print(line);
-      // we’ll parse the HTML body here
-      if (section=="header") { // headers..
+      if (section=="header") {
         Serial.print(".");
-        if (line=="\n") { // skips the empty space at the beginning 
+        if (line=="\n") { 
           section="json";
         }
       }
-      else if (section=="json") {  // print the good stuff
+      else if (section=="json") {
         section="ignore";
         String result = line.substring(1);
-
-        // Parse JSON
         int size = result.length() + 1;
         char json[size];
         result.toCharArray(json, size);
@@ -145,7 +151,6 @@ void loop() {
           return;
         }
 
-        //Serial.println(json_parsed["status"]);
         if (strcmp(json_parsed["status"], "success") == 0) {
           digitalWrite(pin, HIGH); 
           Serial.println("LED ON");
@@ -168,10 +173,8 @@ void loop() {
           loop =0;
         }
         else {
-          Serial.println("-------no status-------------");
-          digitalWrite(pin, LOW);
-          Serial.println("led off");
-          errorLights();
+          Serial.println("---------Status in not success----------");
+          errorLights(2);
           loop =0;
         }
       }
